@@ -53,7 +53,7 @@ yfs_client::isfile(inum inum)
         printf("isfile: %lld is a file\n", inum);
         return true;
     } 
-    printf("isfile: %lld is a dir\n", inum);
+    printf("isfile: %lld is not a file\n", inum);
     return false;
 }
 /** Your code here for Lab...
@@ -66,7 +66,37 @@ bool
 yfs_client::isdir(inum inum)
 {
     // Oops! is this still correct when you implement symlink?
-    return ! isfile(inum);
+    extent_protocol::attr a;
+
+    if (ec->getattr(inum, a) != extent_protocol::OK) {
+        printf("error getting attr\n");
+        return false;
+    }
+
+    if (a.type == extent_protocol::T_DIR) {
+        printf("isdir: %lld is a directory\n", inum);
+        return true;
+    } 
+    printf("isdir: %lld is not a directory\n", inum);
+    return false;
+}
+
+bool
+yfs_client::issymlink(inum inum)
+{
+    extent_protocol::attr a;
+
+    if (ec->getattr(inum, a) != extent_protocol::OK) {
+        printf("error getting attr\n");
+        return false;
+    }
+
+    if (a.type == extent_protocol::T_SLINK) {
+        printf("issymlink: %lld is a symbol link\n", inum);
+        return true;
+    } 
+    printf("issymlink: %lld is not a symbol link\n", inum);
+    return false;
 }
 
 int
@@ -77,6 +107,7 @@ yfs_client::getfile(inum inum, fileinfo &fin)
     printf("getfile %016llx\n", inum);
     extent_protocol::attr a;
     if (ec->getattr(inum, a) != extent_protocol::OK) {
+        printf("yfs_client: getdir: IOERR\n");
         r = IOERR;
         goto release;
     }
@@ -99,12 +130,42 @@ yfs_client::getdir(inum inum, dirinfo &din)
     printf("getdir %016llx\n", inum);
     extent_protocol::attr a;
     if (ec->getattr(inum, a) != extent_protocol::OK) {
+        printf("yfs_client: getdir: IOERR\n");
         r = IOERR;
         goto release;
     }
     din.atime = a.atime;
     din.mtime = a.mtime;
     din.ctime = a.ctime;
+
+release:
+    return r;
+}
+
+int
+yfs_client::getsymlink(inum inum, symlinkinfo &slin)
+{
+    int r = OK;
+
+    std::string buf;
+    printf("getsymlink %016llx\n", inum);
+    extent_protocol::attr a;
+    if (ec->getattr(inum, a) != extent_protocol::OK) {
+        printf("yfs_client: getdir: IOERR\n");
+        r = IOERR;
+        goto release;
+    }
+    
+    if(ec->get(inum, buf) != extent_protocol::OK) {
+        r = NOENT;
+        goto release;
+    }
+
+    slin.atime = a.atime;
+    slin.mtime = a.mtime;
+    slin.ctime = a.ctime;
+    slin.size = strlen(buf.c_str());
+    printf("getsymlink %016llx -> sz %llu\n", inum, slin.size);
 
 release:
     return r;
@@ -130,7 +191,18 @@ yfs_client::setattr(inum ino, size_t size)
      * note: get the content of inode ino, and modify its content
      * according to the size (<, =, or >) content length.
      */
-
+    extent_protocol::attr a;
+    std::string buf;
+    ec->getattr(ino, a);
+    ec->get(ino, buf);
+    size_t old_size = a.size;
+    if(size <= old_size) {
+        buf = buf.substr(0, size);
+    }
+    else {
+        buf = buf.append(size-old_size, '\0'); 
+    }
+    ec->put(ino, buf);
     return r;
 }
 
@@ -144,7 +216,24 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
      * note: lookup is what you need to check if file exist;
      * after create file or dir, you must remember to modify the parent infomation.
      */
-
+    inum id;
+    if(ec->create(extent_protocol::T_FILE, id) != extent_protocol::OK) {
+        printf("error when creating file!\n");
+    }
+    ino_out = id;
+    std::string buf;
+    ec->get(parent, buf);
+    unsigned long long length = strlen(name);
+    unsigned long long tol_len = sizeof(inum) + sizeof(unsigned long long) + length;
+    char *entry = new char[tol_len];
+    memcpy(entry, &id, sizeof(inum));
+    memcpy(entry + sizeof(inum), &length, sizeof(unsigned long long));
+    memcpy(entry + sizeof(inum) + sizeof(unsigned long long), name, length);
+    std::string buf_tmp;
+    buf_tmp.assign(entry, tol_len);
+    delete []entry;
+    buf = buf.append(buf_tmp);
+    ec->put(parent, buf);
     return r;
 }
 
@@ -158,7 +247,29 @@ yfs_client::mkdir(inum parent, const char *name, mode_t mode, inum &ino_out)
      * note: lookup is what you need to check if directory exist;
      * after create file or dir, you must remember to modify the parent infomation.
      */
+    bool found = false;
+    lookup(parent, name, found, ino_out);
+    if(found == true) return EXIST;
 
+    inum id;
+    if(ec->create(extent_protocol::T_DIR, id) != extent_protocol::OK) {
+        printf("error when creating directory!\n");
+    }
+    ino_out = id;
+    
+    std::string buf;
+    ec->get(parent, buf);
+    unsigned long long length = strlen(name);
+    unsigned long long tol_len = sizeof(inum) + sizeof(unsigned long long) + length;
+    char *entry = new char[tol_len];
+    memcpy(entry, &id, sizeof(inum));
+    memcpy(entry + sizeof(inum), &length, sizeof(unsigned long long));
+    memcpy(entry + sizeof(inum) + sizeof(unsigned long long), name, length);
+    std::string buf_tmp;
+    buf_tmp.assign(entry, tol_len);
+    delete []entry;
+    buf = buf.append(buf_tmp);
+    ec->put(parent, buf);
     return r;
 }
 
@@ -172,7 +283,32 @@ yfs_client::lookup(inum parent, const char *name, bool &found, inum &ino_out)
      * note: lookup file from parent dir according to name;
      * you should design the format of directory content.
      */
-
+    found = false;
+    std::string buf;
+    ec->get(parent, buf);
+    inum id;
+    unsigned long long length;
+    const char *c_str = buf.c_str();
+    unsigned long long left = buf.length();
+    char *ptr = (char *)c_str;
+    while(left > 0) {
+        memcpy(&id, ptr, sizeof(inum));
+        ptr += sizeof(inum);
+        memcpy(&length, ptr, sizeof(unsigned long long));
+        ptr += sizeof(unsigned long long);
+        char *name_buf = new char[length + 1];
+        memcpy(name_buf, ptr, length);
+        name_buf[length] = '\0';
+        if(strcmp(name_buf, name) == 0) {
+            ino_out = id;
+            found = true;
+            delete []name_buf;
+            break;
+        }
+        delete []name_buf;
+        ptr += length;
+        left -= (sizeof(inum) + sizeof(unsigned long long) + length);
+    }
     return r;
 }
 
@@ -186,7 +322,30 @@ yfs_client::readdir(inum dir, std::list<dirent> &list)
      * note: you should parse the dirctory content using your defined format,
      * and push the dirents to the list.
      */
-
+    std::string buf;
+    ec->get(dir, buf);
+    inum id;
+    unsigned long long length;
+    const char *c_str = buf.c_str();
+    unsigned long long left = buf.length();
+    char *ptr = (char *)c_str;
+    while(left > 0) {
+        memcpy(&id, ptr, sizeof(inum));
+        ptr += sizeof(inum);
+        memcpy(&length, ptr, sizeof(unsigned long long));
+        ptr += sizeof(unsigned long long);
+        char *name_buf = new char[length];
+        memcpy(name_buf, ptr, length);
+        ptr += length;
+        std::string name;
+        name.assign((const char *)name_buf, length);
+        delete []name_buf;
+        struct dirent dirent_buf;
+        dirent_buf.inum = id;
+        dirent_buf.name = name;
+        left -= (sizeof(inum) + sizeof(unsigned long long) + length);
+        list.push_back(dirent_buf);
+    }
     return r;
 }
 
@@ -199,7 +358,17 @@ yfs_client::read(inum ino, size_t size, off_t off, std::string &data)
      * your code goes here.
      * note: read using ec->get().
      */
-
+    std::string buf;
+    ec->get(ino, buf);
+    unsigned long long total_size = buf.size();
+    if((unsigned long long)off >= total_size) {
+        data.clear();
+        return r;
+    }
+    if(total_size < off + size) {
+        size = total_size - off;
+    }
+    data.assign(buf.substr(off, size).c_str(), size);
     return r;
 }
 
@@ -214,7 +383,18 @@ yfs_client::write(inum ino, size_t size, off_t off, const char *data,
      * note: write using ec->put().
      * when off > length of original file, fill the holes with '\0'.
      */
-
+    std::string buf;
+    ec->get(ino, buf);
+    unsigned long long total_size = buf.size();
+    if((unsigned long long)off > total_size) {
+        buf = buf.append(off-total_size, '\0');
+        total_size = buf.size();
+    }
+    std::string to_write;
+    to_write.assign(data, size);
+    buf = buf.replace(off, size, to_write);
+    ec->put(ino, buf);
+    bytes_written = size;
     return r;
 }
 
@@ -227,7 +407,93 @@ int yfs_client::unlink(inum parent,const char *name)
      * note: you should remove the file using ec->remove,
      * and update the parent directory content.
      */
+    bool found = false;
+    inum id;
+    lookup(parent, name, found, id);
+    if(found == false) return NOENT;
+    ec->remove(id);
 
+    std::string buf;
+    ec->get(parent, buf);
+    unsigned long long length = strlen(name);
+    const char *c_str = buf.c_str();
+    unsigned long long left = buf.length();
+    char *ptr = (char *)c_str;
+
+    unsigned long long dir_new_length = left - 
+            (sizeof(inum) + sizeof(unsigned long long) + length);
+    char *dir_new = new char[dir_new_length];
+    char *ptr_new = dir_new;
+    while(left > 0) {
+        memcpy(&id, ptr, sizeof(inum));
+        ptr += sizeof(inum);
+        memcpy(&length, ptr, sizeof(unsigned long long));
+        ptr += sizeof(unsigned long long);
+        char *name_buf = new char[length + 1];
+        memcpy(name_buf, ptr, length);
+        ptr += length;
+        name_buf[length] = '\0';
+        if(strcmp(name_buf, name)) {
+            memcpy(ptr_new, &id, sizeof(inum));
+            ptr_new += sizeof(inum);
+            memcpy(ptr_new, &length, sizeof(unsigned long long));
+            ptr_new += sizeof(unsigned long long);
+            memcpy(ptr_new, name_buf, length);
+            ptr_new += length;
+        }
+        left -= (sizeof(inum) + sizeof(unsigned long long) + length);
+    }
+    std::string buf_new;
+    buf_new.assign(dir_new, dir_new_length);
+    ec->put(parent, buf_new);
     return r;
 }
 
+int yfs_client::readlink(inum ino, char *&link)
+{
+    int r = OK;
+    std::string buf;
+    if(ec->get(ino, buf) != extent_protocol::OK) {
+        link = NULL;
+        return NOENT;
+    }
+    char *link_str = new char[buf.length()];
+    strncpy(link_str, buf.c_str(), buf.length() + 1);
+    link = link_str;
+    return r;
+}
+
+int yfs_client::symlink(inum parent, const char *link, const char *name, inum &ino_out)
+{
+    int r = OK;
+
+    bool found = false;
+    inum id;
+    lookup(parent, name, found, id);
+    if(found == true) return EXIST;
+
+    if(ec->create(extent_protocol::T_SLINK, id) != extent_protocol::OK) {
+        printf("error when creating symbol link!\n");
+        return IOERR;
+    }
+    
+    ino_out = id;
+    std::string buf;
+    ec->get(parent, buf);
+    unsigned long long length = strlen(name);
+    unsigned long long tol_len = sizeof(inum) + sizeof(unsigned long long) + length;
+    char *entry = new char[tol_len];
+    memcpy(entry, &id, sizeof(inum));
+    memcpy(entry + sizeof(inum), &length, sizeof(unsigned long long));
+    memcpy(entry + sizeof(inum) + sizeof(unsigned long long), name, length);
+    std::string buf_tmp;
+    buf_tmp.assign(entry, tol_len);
+    delete []entry;
+    buf = buf.append(buf_tmp);
+    ec->put(parent, buf);
+
+    ec->get(id, buf);
+    buf.assign(link, strlen(link));
+    ec->put(id, buf);
+    return r;
+}
