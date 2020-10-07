@@ -11,26 +11,16 @@ disk::disk()
 void
 disk::read_block(blockid_t id, char *buf)
 {
-<<<<<<< HEAD
   if (id < 0 || id >= BLOCK_NUM || buf == NULL)
     return;
-
-=======
-  if(buf == NULL || id >= BLOCK_NUM) return;
->>>>>>> lab1
   memcpy(buf, blocks[id], BLOCK_SIZE);
 }
 
 void
 disk::write_block(blockid_t id, const char *buf)
 {
-<<<<<<< HEAD
   if (id < 0 || id >= BLOCK_NUM || buf == NULL)
     return;
-
-=======
-  if(buf == NULL || id >= BLOCK_NUM) return;
->>>>>>> lab1
   memcpy(blocks[id], buf, BLOCK_SIZE);
 }
 
