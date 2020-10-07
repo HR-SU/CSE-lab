@@ -45,7 +45,7 @@ getattr(yfs_client::inum inum, struct stat &st)
     bzero(&st, sizeof(st));
 
     st.st_ino = inum;
-    printf("getattr %016llx %d\n", inum, yfs->isfile(inum));
+    printf("getattr %016llx\n", inum);
     if(yfs->isfile(inum)){
         yfs_client::fileinfo info;
         ret = yfs->getfile(inum, info);
@@ -58,7 +58,7 @@ getattr(yfs_client::inum inum, struct stat &st)
         st.st_ctime = info.ctime;
         st.st_size = info.size;
         printf("   getattr -> %llu\n", info.size);
-    } else {
+    } else if(yfs->isdir(inum)){
         yfs_client::dirinfo info;
         ret = yfs->getdir(inum, info);
         if(ret != yfs_client::OK)
@@ -69,6 +69,18 @@ getattr(yfs_client::inum inum, struct stat &st)
         st.st_mtime = info.mtime;
         st.st_ctime = info.ctime;
         printf("   getattr -> %lu %lu %lu\n", info.atime, info.mtime, info.ctime);
+    } else {
+        yfs_client::symlinkinfo info;
+        ret = yfs->getsymlink(inum, info);
+        if(ret != yfs_client::OK)
+            return ret;
+        st.st_mode = S_IFLNK | 0777;
+        st.st_nlink = 1;
+        st.st_atime = info.atime;
+        st.st_mtime = info.mtime;
+        st.st_ctime = info.ctime;
+        st.st_size = info.size;
+        printf("   getattr -> %llu\n", info.size);
     }
     return yfs_client::OK;
 }
@@ -138,6 +150,10 @@ fuseserver_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
     fuse_reply_err(req, ENOSYS);
 #endif
 
+    } else if (FUSE_SET_ATTR_ATIME & to_set){
+        struct stat st;
+        getattr(ino, st);
+        fuse_reply_attr(req, &st, 0);
     } else {
         fuse_reply_err(req, ENOSYS);
     }
@@ -443,6 +459,41 @@ fuseserver_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 }
 
 void
+fuseserver_readlink(fuse_req_t req, fuse_ino_t ino)
+{
+    int r;
+    char *link = NULL;
+    if((r = yfs->readlink(ino, link)) == yfs_client::OK) {
+        fuse_reply_readlink(req, link);
+    }
+    else {
+        fuse_reply_err(req, ENOENT);
+    }
+}
+
+void
+fuseserver_symlink(fuse_req_t req, const char *link, fuse_ino_t parent, const char *name)
+{
+    int r;
+
+    struct fuse_entry_param e;
+    e.attr_timeout = 0.0;
+    e.entry_timeout = 0.0;
+    e.generation = 0;
+    yfs_client::inum ino;
+    
+    if((r = yfs->symlink(parent, link, name, ino)) == yfs_client::OK) {
+        e.ino = ino;
+        getattr(ino, e.attr);
+        fuse_reply_entry(req, &e);
+    }
+    else if(r == yfs_client::EXIST) {
+        fuse_reply_err(req, EEXIST);
+    }
+    else fuse_reply_err(req, ENOENT);
+}
+
+void
 fuseserver_statfs(fuse_req_t req)
 {
     struct statvfs buf;
@@ -500,6 +551,8 @@ main(int argc, char *argv[])
     fuseserver_oper.setattr    = fuseserver_setattr;
     fuseserver_oper.unlink     = fuseserver_unlink;
     fuseserver_oper.mkdir      = fuseserver_mkdir;
+    fuseserver_oper.readlink   = fuseserver_readlink;
+    fuseserver_oper.symlink    = fuseserver_symlink;
     /** Your code here for Lab.
      * you may want to add
      * routines here to implement symbolic link,
