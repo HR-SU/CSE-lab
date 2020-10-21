@@ -23,7 +23,7 @@ int extent_server::create(uint32_t type, extent_protocol::extentid_t &id)
   return extent_protocol::OK;
 }
 
-int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &r)
+int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
 {
   id &= 0x7fffffff;
   
@@ -31,7 +31,6 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &r)
   int size = buf.size();
   im->write_file(id, cbuf, size);
   
-  r = 0;
   return extent_protocol::OK;
 }
 
@@ -65,18 +64,17 @@ int extent_server::getattr(extent_protocol::extentid_t id, extent_protocol::attr
   memset(&attr, 0, sizeof(attr));
   im->getattr(id, attr);
   a = attr;
-  
+
   return extent_protocol::OK;
 }
 
-int extent_server::remove(extent_protocol::extentid_t id, int &r)
+int extent_server::remove(extent_protocol::extentid_t id, int &)
 {
   printf("extent_server: write %lld\n", id);
 
   id &= 0x7fffffff;
   im->remove_file(id);
-
-  r = 0;
+ 
   return extent_protocol::OK;
 }
 

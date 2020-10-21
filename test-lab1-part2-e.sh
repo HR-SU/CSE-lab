@@ -6,9 +6,8 @@
 ###########################################
 
 DIR=$1
-SUFFIX=$(echo $DIR | grep -o -P 'yfs\d' | head)
-TEST_FILE1=foo.txt.${SUFFIX}
-TEST_FILE2=${DIR}/foo.txt.${SUFFIX}
+TEST_FILE1=foo.txt
+TEST_FILE2=${DIR}/foo.txt
 SRCFILE=tmprand
 
 dd if=/dev/urandom of=${SRCFILE} bs=1K count=400 >/dev/null 2>&1
