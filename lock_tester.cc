@@ -176,8 +176,8 @@ main(int argc, char *argv[])
     VERIFY(pthread_mutex_init(&count_mutex, NULL) == 0);
     printf("lock client\n");
     // Lab2: Use lock_client_cache when you test lock_cache
-    for (int i = 0; i < nt; i++) lc[i] = new lock_client(dst);
-    // for (int i = 0; i < nt; i++) lc[i] = new lock_client_cache(dst);
+    // for (int i = 0; i < nt; i++) lc[i] = new lock_client(dst);
+    for (int i = 0; i < nt; i++) lc[i] = new lock_client_cache(dst);
 
     if(!test || test == 1){
       test1();

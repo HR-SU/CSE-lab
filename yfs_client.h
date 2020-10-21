@@ -44,6 +44,7 @@ class yfs_client {
  private:
   static std::string filename(inum);
   static inum n2i(std::string);
+  int lookup_nolock(inum, const char *, bool &, inum &);
 
  public:
   yfs_client(std::string, std::string);
