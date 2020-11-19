@@ -9,6 +9,14 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+typedef unsigned long long cycles_t;
+
+inline cycles_t currentcycles() {
+    cycles_t result;
+    __asm__ __volatile__ ("rdtsc": "=A"(result));
+    return result;
+}
+
 yfs_client::yfs_client()
 {
     ec = new extent_client();
@@ -39,45 +47,80 @@ yfs_client::filename(inum inum)
     return ost.str();
 }
 
+extent_protocol::types
+yfs_client::filetype(inum inum, fileinfo &fin)
+{
+    //cycles_t start = currentcycles();
+    extent_protocol::attr a;
+    
+    if (ec->getattr(inum, a) != extent_protocol::OK) {
+        printf("error getting attr\n");
+        return (extent_protocol::types)0;
+    }
+
+    if (a.type == extent_protocol::T_DIR) {
+        fin.atime = a.atime;
+        fin.mtime = a.mtime;
+        fin.ctime = a.ctime;
+    }
+    else {
+        fin.atime = a.atime;
+        fin.mtime = a.mtime;
+        fin.ctime = a.ctime;
+        fin.size = a.size;
+    }
+    //printf("yfs: filetype cost %lld cycles\n", currentcycles()-start);
+    return (extent_protocol::types)a.type;
+}
+/*
 bool
 yfs_client::isfile(inum inum)
 {
+    cycles_t start = currentcycles();
     extent_protocol::attr a;
 
     if (ec->getattr(inum, a) != extent_protocol::OK) {
         printf("error getting attr\n");
+        printf("yfs: isfile cost %lld cycles\n", currentcycles()-start);
         return false;
     }
 
     if (a.type == extent_protocol::T_FILE) {
         printf("isfile: %lld is a file\n", inum);
+        printf("yfs: isfile cost %lld cycles\n", currentcycles()-start);
         return true;
     } 
     printf("isfile: %lld is not a file\n", inum);
+    printf("yfs: isfile cost %lld cycles\n", currentcycles()-start);
     return false;
 }
+*/
 /** Your code here for Lab...
  * You may need to add routines such as
  * readlink, issymlink here to implement symbolic link.
  * 
  * */
-
+/*
 bool
 yfs_client::isdir(inum inum)
 {
+    cycles_t start = currentcycles();
     // Oops! is this still correct when you implement symlink?
     extent_protocol::attr a;
 
     if (ec->getattr(inum, a) != extent_protocol::OK) {
         printf("error getting attr\n");
+        printf("yfs: isdir cost %lld cycles\n", currentcycles()-start);
         return false;
     }
 
     if (a.type == extent_protocol::T_DIR) {
         printf("isdir: %lld is a directory\n", inum);
+        printf("yfs: isdir cost %lld cycles\n", currentcycles()-start);
         return true;
     } 
     printf("isdir: %lld is not a directory\n", inum);
+    printf("yfs: isdir cost %lld cycles\n", currentcycles()-start);
     return false;
 }
 
@@ -102,6 +145,7 @@ yfs_client::issymlink(inum inum)
 int
 yfs_client::getfile(inum inum, fileinfo &fin)
 {
+    cycles_t start = currentcycles();
     int r = OK;
 
     printf("getfile %016llx\n", inum);
@@ -119,12 +163,14 @@ yfs_client::getfile(inum inum, fileinfo &fin)
     printf("getfile %016llx -> sz %llu\n", inum, fin.size);
 
 release:
+    printf("yfs: getfile cost %lld cycles\n", currentcycles()-start);
     return r;
 }
 
 int
 yfs_client::getdir(inum inum, dirinfo &din)
 {
+    cycles_t start = currentcycles();
     int r = OK;
 
     printf("getdir %016llx\n", inum);
@@ -139,6 +185,7 @@ yfs_client::getdir(inum inum, dirinfo &din)
     din.ctime = a.ctime;
 
 release:
+    printf("yfs: getdir cost %lld cycles\n", currentcycles()-start);
     return r;
 }
 
@@ -170,7 +217,7 @@ yfs_client::getsymlink(inum inum, symlinkinfo &slin)
 release:
     return r;
 }
-
+*/
 
 #define EXT_RPC(xx) do { \
     if ((xx) != extent_protocol::OK) { \
@@ -209,6 +256,7 @@ yfs_client::setattr(inum ino, size_t size)
 int
 yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
 {
+    //cycles_t start = currentcycles();
     int r = OK;
 
     /*
@@ -220,9 +268,11 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
     if(ec->create(extent_protocol::T_FILE, id) != extent_protocol::OK) {
         printf("error when creating file!\n");
     }
+    //cycles_t check1 = currentcycles();
     ino_out = id;
     std::string buf;
     ec->get(parent, buf);
+    //cycles_t check2 = currentcycles();
     unsigned long long length = strlen(name);
     unsigned long long tol_len = sizeof(inum) + sizeof(unsigned long long) + length;
     char *entry = new char[tol_len];
@@ -233,7 +283,9 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
     buf_tmp.assign(entry, tol_len);
     delete []entry;
     buf = buf.append(buf_tmp);
+    //cycles_t check3 = currentcycles();
     ec->put(parent, buf);
+    //printf("yfs: create %lld, %lld, %lld, %lld\n", check1-start, check2-check1, check3-check2, currentcycles()-check3);
     return r;
 }
 
@@ -276,6 +328,7 @@ yfs_client::mkdir(inum parent, const char *name, mode_t mode, inum &ino_out)
 int
 yfs_client::lookup(inum parent, const char *name, bool &found, inum &ino_out)
 {
+    ///cycles_t start = currentcycles();
     int r = OK;
 
     /*
@@ -286,6 +339,7 @@ yfs_client::lookup(inum parent, const char *name, bool &found, inum &ino_out)
     found = false;
     std::string buf;
     ec->get(parent, buf);
+    //cycles_t check1 = currentcycles();
     inum id;
     unsigned long long length;
     const char *c_str = buf.c_str();
@@ -309,6 +363,7 @@ yfs_client::lookup(inum parent, const char *name, bool &found, inum &ino_out)
         ptr += length;
         left -= (sizeof(inum) + sizeof(unsigned long long) + length);
     }
+    //printf("yfs: lookup %lld, %lld\n", check1-start, currentcycles()-check1);
     return r;
 }
 
@@ -376,6 +431,7 @@ int
 yfs_client::write(inum ino, size_t size, off_t off, const char *data,
         size_t &bytes_written)
 {
+    //cycles_t start = currentcycles();
     int r = OK;
 
     /*
@@ -385,6 +441,7 @@ yfs_client::write(inum ino, size_t size, off_t off, const char *data,
      */
     std::string buf;
     ec->get(ino, buf);
+    //cycles_t check1 = currentcycles();
     unsigned long long total_size = buf.size();
     if((unsigned long long)off > total_size) {
         buf = buf.append(off-total_size, '\0');
@@ -393,13 +450,16 @@ yfs_client::write(inum ino, size_t size, off_t off, const char *data,
     std::string to_write;
     to_write.assign(data, size);
     buf = buf.replace(off, size, to_write);
+    //cycles_t check2 = currentcycles();
     ec->put(ino, buf);
     bytes_written = size;
+    //printf("yfs: write %lld, %lld, %lld\n", check1-start, check2-check1, currentcycles()-check2);
     return r;
 }
 
 int yfs_client::unlink(inum parent,const char *name)
 {
+    //cycles_t start = currentcycles();
     int r = OK;
 
     /*
@@ -409,20 +469,15 @@ int yfs_client::unlink(inum parent,const char *name)
      */
     bool found = false;
     inum id;
-    lookup(parent, name, found, id);
-    if(found == false) return NOENT;
-    ec->remove(id);
-
+    unsigned long long length;
     std::string buf;
     ec->get(parent, buf);
-    unsigned long long length = strlen(name);
     const char *c_str = buf.c_str();
     unsigned long long left = buf.length();
     char *ptr = (char *)c_str;
 
-    unsigned long long dir_new_length = left - 
-            (sizeof(inum) + sizeof(unsigned long long) + length);
-    char *dir_new = new char[dir_new_length];
+    unsigned long long dir_new_length = left;
+    char *dir_new = new char[left];
     char *ptr_new = dir_new;
     while(left > 0) {
         memcpy(&id, ptr, sizeof(inum));
@@ -441,11 +496,24 @@ int yfs_client::unlink(inum parent,const char *name)
             memcpy(ptr_new, name_buf, length);
             ptr_new += length;
         }
+        else {
+            found = true;
+            ec->remove(id);
+        }
         left -= (sizeof(inum) + sizeof(unsigned long long) + length);
+        delete []name_buf;
     }
-    std::string buf_new;
-    buf_new.assign(dir_new, dir_new_length);
-    ec->put(parent, buf_new);
+    if(found) {
+        dir_new_length -= (sizeof(inum) + sizeof(unsigned long long) + strlen(name));
+        std::string buf_new;
+        buf_new.assign(dir_new, dir_new_length);
+        ec->put(parent, buf_new);
+    }
+    else {
+        r = NOENT;
+    }
+    delete []dir_new;
+    //printf("yfs: unlink cost %lld cycles\n", currentcycles()-start);
     return r;
 }
 

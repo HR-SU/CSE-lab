@@ -45,13 +45,7 @@ class yfs_client {
   yfs_client();
   yfs_client(std::string, std::string);
 
-  bool isfile(inum);
-  bool isdir(inum);
-  bool issymlink(inum);
-
-  int getfile(inum, fileinfo &);
-  int getdir(inum, dirinfo &);
-  int getsymlink(inum, symlinkinfo &);
+  extent_protocol::types filetype(inum, fileinfo&);
 
   int setattr(inum, size_t);
   int lookup(inum, const char *, bool &, inum &);

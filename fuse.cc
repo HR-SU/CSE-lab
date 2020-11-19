@@ -25,6 +25,14 @@ int id() {
     return myid;
 }
 
+typedef unsigned long long cycles_t;
+
+inline cycles_t currentcycles() {
+    cycles_t result;
+    __asm__ __volatile__ ("rdtsc": "=A"(result));
+    return result;
+}
+
 //
 // A file/directory's attributes are a set of information
 // including owner, permissions, size, &c. The information is
@@ -40,48 +48,49 @@ int id() {
 yfs_client::status
 getattr(yfs_client::inum inum, struct stat &st)
 {
-    yfs_client::status ret;
+    //cycles_t start_cycle = currentcycles();
+    //yfs_client::status ret;
 
     bzero(&st, sizeof(st));
 
     st.st_ino = inum;
-    printf("getattr %016llx\n", inum);
-    if(yfs->isfile(inum)){
-        yfs_client::fileinfo info;
-        ret = yfs->getfile(inum, info);
-        if(ret != yfs_client::OK)
-            return ret;
-        st.st_mode = S_IFREG | 0666;
-        st.st_nlink = 1;
-        st.st_atime = info.atime;
-        st.st_mtime = info.mtime;
-        st.st_ctime = info.ctime;
-        st.st_size = info.size;
-        printf("   getattr -> %llu\n", info.size);
-    } else if(yfs->isdir(inum)){
-        yfs_client::dirinfo info;
-        ret = yfs->getdir(inum, info);
-        if(ret != yfs_client::OK)
-            return ret;
-        st.st_mode = S_IFDIR | 0777;
-        st.st_nlink = 2;
-        st.st_atime = info.atime;
-        st.st_mtime = info.mtime;
-        st.st_ctime = info.ctime;
-        printf("   getattr -> %lu %lu %lu\n", info.atime, info.mtime, info.ctime);
-    } else {
-        yfs_client::symlinkinfo info;
-        ret = yfs->getsymlink(inum, info);
-        if(ret != yfs_client::OK)
-            return ret;
-        st.st_mode = S_IFLNK | 0777;
-        st.st_nlink = 1;
-        st.st_atime = info.atime;
-        st.st_mtime = info.mtime;
-        st.st_ctime = info.ctime;
-        st.st_size = info.size;
-        printf("   getattr -> %llu\n", info.size);
+    yfs_client::fileinfo info;
+    //printf("getattr %016llx\n", inum);
+    extent_protocol::types type = yfs->filetype(inum, info);
+    switch(type) {
+        case extent_protocol::T_DIR: {
+            st.st_mode = S_IFDIR | 0777;
+            st.st_nlink = 2;
+            st.st_atime = info.atime;
+            st.st_mtime = info.mtime;
+            st.st_ctime = info.ctime;
+            //printf("   getattr -> %lu %lu %lu\n", info.atime, info.mtime, info.ctime);
+            break;
+        }
+        case extent_protocol::T_FILE: {
+            st.st_mode = S_IFREG | 0666;
+            st.st_nlink = 1;
+            st.st_atime = info.atime;
+            st.st_mtime = info.mtime;
+            st.st_ctime = info.ctime;
+            st.st_size = info.size;
+            //printf("   getattr -> %llu\n", info.size);
+            break;
+        }
+        case extent_protocol::T_SLINK: {
+            st.st_mode = S_IFLNK | 0777;;
+            st.st_nlink = 1;
+            st.st_atime = info.atime;
+            st.st_mtime = info.mtime;
+            st.st_ctime = info.ctime;
+            st.st_size = info.size;
+            //printf("   getattr -> %llu\n", info.size);
+            break;
+        }
+        default: return yfs_client::IOERR;
     }
+
+    //printf("yfs: getattr cost %lld cycles\n", currentcycles() - start_cycle);
     return yfs_client::OK;
 }
 
@@ -133,9 +142,9 @@ void
 fuseserver_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
         int to_set, struct fuse_file_info *fi)
 {
-    printf("fuseserver_setattr 0x%x\n", to_set);
+    //printf("fuseserver_setattr 0x%x\n", to_set);
     if (FUSE_SET_ATTR_SIZE & to_set) {
-        printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
+        //printf("   fuseserver_setattr set size to %zu\n", attr->st_size);
         struct stat st;
 
 #if 1
@@ -213,12 +222,17 @@ fuseserver_write(fuse_req_t req, fuse_ino_t ino,
 {
 #if 1
     // Change the above line to "#if 1", and your code goes here
+    cycles_t start = currentcycles();
+    cycles_t check1;
     int r;
     if ((r = yfs->write(ino, size, off, buf, size)) == yfs_client::OK) {
+        check1 = currentcycles();
         fuse_reply_write(req, size);
     } else {
+        check1 = currentcycles();
         fuse_reply_err(req, ENOENT);
     }
+    printf("fuse: write %lld, %lld\n", check1-start, currentcycles()-check1);
 #else
     fuse_reply_err(req, ENOSYS);
 #endif
@@ -268,18 +282,22 @@ void
 fuseserver_create(fuse_req_t req, fuse_ino_t parent, const char *name,
         mode_t mode, struct fuse_file_info *fi)
 {
+    cycles_t start = currentcycles(), check1;
     struct fuse_entry_param e;
     yfs_client::status ret;
     if( (ret = fuseserver_createhelper( parent, name, mode, &e, extent_protocol::T_FILE)) == yfs_client::OK ) {
+        check1 = currentcycles();
         fuse_reply_create(req, &e, fi);
-        printf("OK: create returns.\n");
+        //printf("OK: create returns.\n");
     } else {
+        check1 = currentcycles();
         if (ret == yfs_client::EXIST) {
             fuse_reply_err(req, EEXIST);
         }else{
             fuse_reply_err(req, ENOENT);
         }
     }
+    printf("fuse: create %lld, %lld\n", check1-start, currentcycles()-check1);
 }
 
 void fuseserver_mknod( fuse_req_t req, fuse_ino_t parent, 
@@ -305,6 +323,7 @@ void fuseserver_mknod( fuse_req_t req, fuse_ino_t parent,
 void
 fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
+    //cycles_t start_cycle = currentcycles();
     struct fuse_entry_param e;
     // In yfs, timeouts are always set to 0.0, and generations are always set to 0
     e.attr_timeout = 0.0;
@@ -322,7 +341,7 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     } else {
         fuse_reply_err(req, ENOENT);
     }
-
+    //printf("fuse: lookup cost %lld cycles\n", currentcycles() - start_cycle);
 }
 
 
@@ -369,9 +388,10 @@ fuseserver_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     yfs_client::inum inum = ino; // req->in.h.nodeid;
     struct dirbuf b;
 
-    printf("fuseserver_readdir\n");
+    //printf("fuseserver_readdir\n");
 
-    if(!yfs->isdir(inum)){
+    yfs_client::fileinfo info;
+    if(yfs->filetype(inum, info) != extent_protocol::T_DIR){
         fuse_reply_err(req, ENOTDIR);
         return;
     }
@@ -446,16 +466,20 @@ fuseserver_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 void
 fuseserver_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
+    cycles_t start = currentcycles(), check1;
     int r;
     if ((r = yfs->unlink(parent, name)) == yfs_client::OK) {
+        check1 = currentcycles();
         fuse_reply_err(req, 0);
     } else {
+        check1 = currentcycles();
         if (r == yfs_client::NOENT) {
             fuse_reply_err(req, ENOENT);
         } else {
             fuse_reply_err(req, ENOTEMPTY);
         }
     }
+    printf("fuse: unlink %lld, %lld\n", check1-start, currentcycles()-check1);
 }
 
 void
@@ -573,7 +597,7 @@ main(int argc, char *argv[])
     //fuse_argv[fuse_argc++] = "allow_other";
 
     fuse_argv[fuse_argc++] = mountpoint;
-    fuse_argv[fuse_argc++] = "-d";
+    //fuse_argv[fuse_argc++] = "-d";
 
     fuse_args args = FUSE_ARGS_INIT( fuse_argc, (char **) fuse_argv );
     int foreground;

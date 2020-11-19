@@ -7,7 +7,7 @@
 #include "extent_protocol.h" // TODO: delete it
 
 #define DISK_SIZE  1024*1024*16
-#define BLOCK_SIZE 512
+#define BLOCK_SIZE 1024
 #define BLOCK_NUM  (DISK_SIZE/BLOCK_SIZE)
 
 typedef uint32_t blockid_t;

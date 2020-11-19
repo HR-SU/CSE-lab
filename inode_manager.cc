@@ -172,7 +172,7 @@ inode_manager::get_inode(uint32_t inum)
   struct inode *ino, *ino_disk;
   char buf[BLOCK_SIZE];
 
-  printf("\tim: get_inode %d\n", inum);
+  //printf("\tim: get_inode %d\n", inum);
 
   if (inum < 0 || inum >= INODE_NUM) {
     printf("\tim: inum out of range\n");
@@ -184,7 +184,7 @@ inode_manager::get_inode(uint32_t inum)
 
   ino_disk = (struct inode*)buf + inum%IPB;
   if (ino_disk->type == 0) {
-    printf("\tim: inode not exist\n");
+    //printf("\tim: inode not exist\n");
     return NULL;
   }
 
@@ -200,7 +200,7 @@ inode_manager::put_inode(uint32_t inum, struct inode *ino)
   char buf[BLOCK_SIZE];
   struct inode *ino_disk;
 
-  printf("\tim: put_inode %d\n", inum);
+  //printf("\tim: put_inode %d\n", inum);
   if (ino == NULL)
     return;
 
@@ -263,6 +263,14 @@ inode_manager::read_file(uint32_t inum, char **buf_out, int *size)
   return;
 }
 
+typedef unsigned long long cycles_t;
+
+inline cycles_t currentcycles() {
+    cycles_t result;
+    __asm__ __volatile__ ("rdtsc": "=A"(result));
+    return result;
+}
+
 /* alloc/free blocks if needed */
 void
 inode_manager::write_file(uint32_t inum, const char *buf, int size)
@@ -273,6 +281,7 @@ inode_manager::write_file(uint32_t inum, const char *buf, int size)
    * you need to consider the situation when the size of buf 
    * is larger or smaller than the size of original inode
    */
+  //cycles_t start = currentcycles();
   struct inode* ino = get_inode(inum);
   uint32_t nblock_old = ino->size / BLOCK_SIZE;
   uint32_t nblock_new = size / BLOCK_SIZE;
@@ -372,6 +381,7 @@ inode_manager::write_file(uint32_t inum, const char *buf, int size)
   ino->mtime = time(NULL);
   put_inode(inum, ino);
   free(ino);
+  //printf("im: write cost %lld cycles\n", currentcycles()-start);
   return;
 }
 
