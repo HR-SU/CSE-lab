@@ -267,6 +267,8 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
     inum id;
     if(ec->create(extent_protocol::T_FILE, id) != extent_protocol::OK) {
         printf("error when creating file!\n");
+        r = IOERR;
+        return r;
     }
     //cycles_t check1 = currentcycles();
     ino_out = id;
@@ -286,6 +288,10 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
     //cycles_t check3 = currentcycles();
     ec->put(parent, buf);
     //printf("yfs: create %lld, %lld, %lld, %lld\n", check1-start, check2-check1, check3-check2, currentcycles()-check3);
+    // if(parent == 1 && strlen(name) < 8) {
+    //     strcpy(cachename, name);
+    //     cacheinode = ino_out;
+    // }
     return r;
 }
 
@@ -306,6 +312,8 @@ yfs_client::mkdir(inum parent, const char *name, mode_t mode, inum &ino_out)
     inum id;
     if(ec->create(extent_protocol::T_DIR, id) != extent_protocol::OK) {
         printf("error when creating directory!\n");
+        r = IOERR;
+        return r;
     }
     ino_out = id;
     
@@ -322,6 +330,10 @@ yfs_client::mkdir(inum parent, const char *name, mode_t mode, inum &ino_out)
     delete []entry;
     buf = buf.append(buf_tmp);
     ec->put(parent, buf);
+    // if(parent == 1 && strlen(name) < 8) {
+    //     strcpy(cachename, name);
+    //     cacheinode = ino_out;
+    // }
     return r;
 }
 
@@ -337,6 +349,11 @@ yfs_client::lookup(inum parent, const char *name, bool &found, inum &ino_out)
      * you should design the format of directory content.
      */
     found = false;
+    // if(parent == 1 && strcmp(name, cachename) == 0) {
+    //     found = true;
+    //     ino_out = cacheinode;
+    //     return r;
+    // }
     std::string buf;
     ec->get(parent, buf);
     //cycles_t check1 = currentcycles();
@@ -467,6 +484,9 @@ int yfs_client::unlink(inum parent,const char *name)
      * note: you should remove the file using ec->remove,
      * and update the parent directory content.
      */
+    // if(parent == 1 && strcmp(name, cachename) == 0) {
+    //     cachename[0] = 0;
+    // }
     bool found = false;
     inum id;
     unsigned long long length;

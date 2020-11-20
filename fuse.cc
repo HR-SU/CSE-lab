@@ -232,7 +232,7 @@ fuseserver_write(fuse_req_t req, fuse_ino_t ino,
         check1 = currentcycles();
         fuse_reply_err(req, ENOENT);
     }
-    printf("fuse: write %lld, %lld\n", check1-start, currentcycles()-check1);
+    //printf("fuse: write %lld, %lld\n", check1-start, currentcycles()-check1);
 #else
     fuse_reply_err(req, ENOSYS);
 #endif
@@ -297,7 +297,7 @@ fuseserver_create(fuse_req_t req, fuse_ino_t parent, const char *name,
             fuse_reply_err(req, ENOENT);
         }
     }
-    printf("fuse: create %lld, %lld\n", check1-start, currentcycles()-check1);
+    //printf("fuse: create %lld, %lld\n", check1-start, currentcycles()-check1);
 }
 
 void fuseserver_mknod( fuse_req_t req, fuse_ino_t parent, 
@@ -479,7 +479,7 @@ fuseserver_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
             fuse_reply_err(req, ENOTEMPTY);
         }
     }
-    printf("fuse: unlink %lld, %lld\n", check1-start, currentcycles()-check1);
+    //printf("fuse: unlink %lld, %lld\n", check1-start, currentcycles()-check1);
 }
 
 void

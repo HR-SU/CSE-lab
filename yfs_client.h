@@ -40,6 +40,8 @@ class yfs_client {
  private:
   static std::string filename(inum);
   static inum n2i(std::string);
+  inum cacheinode;
+  char cachename[8];
 
  public:
   yfs_client();
