@@ -48,9 +48,6 @@ inline cycles_t currentcycles() {
 yfs_client::status
 getattr(yfs_client::inum inum, struct stat &st)
 {
-    //cycles_t start_cycle = currentcycles();
-    //yfs_client::status ret;
-
     bzero(&st, sizeof(st));
 
     st.st_ino = inum;
@@ -90,7 +87,6 @@ getattr(yfs_client::inum inum, struct stat &st)
         default: return yfs_client::IOERR;
     }
 
-    //printf("yfs: getattr cost %lld cycles\n", currentcycles() - start_cycle);
     return yfs_client::OK;
 }
 
@@ -222,17 +218,12 @@ fuseserver_write(fuse_req_t req, fuse_ino_t ino,
 {
 #if 1
     // Change the above line to "#if 1", and your code goes here
-    cycles_t start = currentcycles();
-    cycles_t check1;
     int r;
     if ((r = yfs->write(ino, size, off, buf, size)) == yfs_client::OK) {
-        check1 = currentcycles();
         fuse_reply_write(req, size);
     } else {
-        check1 = currentcycles();
         fuse_reply_err(req, ENOENT);
     }
-    //printf("fuse: write %lld, %lld\n", check1-start, currentcycles()-check1);
 #else
     fuse_reply_err(req, ENOSYS);
 #endif
@@ -282,22 +273,18 @@ void
 fuseserver_create(fuse_req_t req, fuse_ino_t parent, const char *name,
         mode_t mode, struct fuse_file_info *fi)
 {
-    cycles_t start = currentcycles(), check1;
     struct fuse_entry_param e;
     yfs_client::status ret;
     if( (ret = fuseserver_createhelper( parent, name, mode, &e, extent_protocol::T_FILE)) == yfs_client::OK ) {
-        check1 = currentcycles();
         fuse_reply_create(req, &e, fi);
         //printf("OK: create returns.\n");
     } else {
-        check1 = currentcycles();
         if (ret == yfs_client::EXIST) {
             fuse_reply_err(req, EEXIST);
         }else{
             fuse_reply_err(req, ENOENT);
         }
     }
-    //printf("fuse: create %lld, %lld\n", check1-start, currentcycles()-check1);
 }
 
 void fuseserver_mknod( fuse_req_t req, fuse_ino_t parent, 
@@ -323,7 +310,6 @@ void fuseserver_mknod( fuse_req_t req, fuse_ino_t parent,
 void
 fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
-    //cycles_t start_cycle = currentcycles();
     struct fuse_entry_param e;
     // In yfs, timeouts are always set to 0.0, and generations are always set to 0
     e.attr_timeout = 0.0;
@@ -341,7 +327,6 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     } else {
         fuse_reply_err(req, ENOENT);
     }
-    //printf("fuse: lookup cost %lld cycles\n", currentcycles() - start_cycle);
 }
 
 
@@ -466,20 +451,16 @@ fuseserver_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 void
 fuseserver_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
-    cycles_t start = currentcycles(), check1;
     int r;
     if ((r = yfs->unlink(parent, name)) == yfs_client::OK) {
-        check1 = currentcycles();
         fuse_reply_err(req, 0);
     } else {
-        check1 = currentcycles();
         if (r == yfs_client::NOENT) {
             fuse_reply_err(req, ENOENT);
         } else {
             fuse_reply_err(req, ENOTEMPTY);
         }
     }
-    //printf("fuse: unlink %lld, %lld\n", check1-start, currentcycles()-check1);
 }
 
 void
@@ -597,7 +578,7 @@ main(int argc, char *argv[])
     //fuse_argv[fuse_argc++] = "allow_other";
 
     fuse_argv[fuse_argc++] = mountpoint;
-    //fuse_argv[fuse_argc++] = "-d";
+    // fuse_argv[fuse_argc++] = "-d";
 
     fuse_args args = FUSE_ARGS_INIT( fuse_argc, (char **) fuse_argv );
     int foreground;
