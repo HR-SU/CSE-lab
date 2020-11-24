@@ -132,17 +132,7 @@ inode_manager::alloc_inode(uint32_t type)
       return inum;
     }
   }
-  
-  struct inode* ino = get_inode(1);
-  ino->type = type;
-  ino->size = 0;
-  ino->atime = time(NULL);
-  ino->mtime = time(NULL);
-  ino->ctime = time(NULL);
-  memset(ino->blocks, 0, sizeof(ino->blocks));
-  put_inode(1, ino);
-  free(ino);
-  return 1;
+  return 0;
 }
 
 void
