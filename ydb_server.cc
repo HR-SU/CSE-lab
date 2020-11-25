@@ -81,7 +81,7 @@ ydb_protocol::status ydb_server::set(ydb_protocol::transaction_id id, const std:
 	while(allocmap[eid] == true && keymap[eid] != key) {
 		eid++;
 	}
-	if(allocmap[id] == false) {
+	if(allocmap[eid] == false) {
 		allocmap[eid] = true;
 		keymap[eid] = key;
 		std::string buf;
