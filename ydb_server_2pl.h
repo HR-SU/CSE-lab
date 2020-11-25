@@ -3,6 +3,7 @@
 
 #include <string>
 #include <map>
+#include <list>
 #include "extent_client.h"
 #include "lock_protocol.h"
 #include "lock_client.h"
@@ -12,6 +13,11 @@
 
 
 class ydb_server_2pl: public ydb_server {
+protected:
+	std::map<ydb_protocol::transaction_id, std::list<lock_protocol::lockid_t>> lockmap;
+	std::map<unsigned int, ydb_protocol::transaction_id> logmap;
+	std::map<unsigned int, std::string> valmap;
+	void acquire_wrapper(ydb_protocol::transaction_id tid, lock_protocol::lockid_t lid);
 public:
 	ydb_server_2pl(std::string, std::string);
 	~ydb_server_2pl();
