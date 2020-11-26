@@ -13,7 +13,7 @@ ydb_server_2pl::~ydb_server_2pl() {
 
 ydb_protocol::status ydb_server_2pl::transaction_begin(int, ydb_protocol::transaction_id &out_id) {    // the first arg is not used, it is just a hack to the rpc lib
 	// lab3: your code here
-	out_id = crtid++;
+	out_id = ++crtid;
 	activemap[out_id] = true;
 	return ydb_protocol::OK;
 }
@@ -26,6 +26,7 @@ ydb_protocol::status ydb_server_2pl::transaction_commit(ydb_protocol::transactio
 	std::list<lock_protocol::lockid_t> locklist = lockmap[id];
 	for(lock_protocol::lockid_t lid : locklist) {
 		lc->release(lid);
+		lockowner[lid] = 0;
 	}
 	activemap[id] = false;
 	return ydb_protocol::OK;
@@ -41,6 +42,7 @@ ydb_protocol::status ydb_server_2pl::transaction_abort(ydb_protocol::transaction
 		if(logmap[lid] == id) {
 			ec->put(lid, valmap[lid]);
 			lc->release(lid);
+			lockowner[lid] = 0;
 		}
 	}
 	activemap[id] = false;
@@ -75,7 +77,11 @@ ydb_protocol::status ydb_server_2pl::set(ydb_protocol::transaction_id id, const 
 	while(allocmap[eid] == true && keymap[eid] != key) {
 		eid++;
 	}
-	acquire_wrapper(id, (unsigned long long)eid);
+	if(!acquire_wrapper(id, (unsigned long long)eid)) {
+		int r;
+		transaction_abort(id, r);
+		return ydb_protocol::ABORT;
+	}
 	if(logmap[eid] != id) {
 		std::string log_buf;
 		ec->get(eid, log_buf);
@@ -113,7 +119,11 @@ ydb_protocol::status ydb_server_2pl::del(ydb_protocol::transaction_id id, const 
 	while(allocmap[eid] == true && keymap[eid] != key) {
 		eid++;
 	}
-	acquire_wrapper(id, eid);
+	if(!acquire_wrapper(id, (unsigned long long)eid)) {
+		int r;
+		transaction_abort(id, r);
+		return ydb_protocol::ABORT;
+	}
 	if(allocmap[eid] == true) {
 		allocmap[eid] = false;
 		keymap[eid] = std::string();
@@ -167,7 +177,7 @@ ydb_protocol::status ydb_server_2pl::del(ydb_protocol::transaction_id id, const 
     return (hash & 0x7FFFFFFF);
 }*/
 
-void ydb_server_2pl::acquire_wrapper(ydb_protocol::transaction_id tid, lock_protocol::lockid_t eid) {
+bool ydb_server_2pl::acquire_wrapper(ydb_protocol::transaction_id tid, lock_protocol::lockid_t eid) {
 	std::list<lock_protocol::lockid_t> locklist = lockmap[tid];
 	bool isfound = false;
 	for(lock_protocol::lockid_t lid : locklist) {
@@ -177,9 +187,30 @@ void ydb_server_2pl::acquire_wrapper(ydb_protocol::transaction_id tid, lock_prot
 		}
 	}
 	if(!isfound) {
-		locklist.push_back(eid);
-		lockmap[tid] = locklist;
+		waitfor[tid] = eid;
+		if(isdeadlock(tid, eid)) {
+			waitfor[tid] = 0;
+			return false;
+		}
 		printf("%d acquire: %llu\n", tid, eid);
 		lc->acquire(eid);
+		locklist.push_back(eid);
+		lockmap[tid] = locklist;
+		lockowner[eid] = tid;
+		waitfor[tid] = 0;
 	}
+	return true;
+}
+
+bool ydb_server_2pl::isdeadlock(ydb_protocol::transaction_id tid, lock_protocol::lockid_t lid) {
+	ydb_protocol::transaction_id owner;
+	lock_protocol::lockid_t wait;
+	owner = lockowner[lid];
+	while(owner > 0 && owner != tid) {
+		wait = waitfor[owner];
+		if(wait > 0) owner = lockowner[wait];
+		else break;
+	}
+	if(owner == tid) return true;
+	return false;
 }

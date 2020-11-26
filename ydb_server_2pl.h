@@ -17,7 +17,10 @@ protected:
 	std::map<ydb_protocol::transaction_id, std::list<lock_protocol::lockid_t>> lockmap;
 	std::map<unsigned int, ydb_protocol::transaction_id> logmap;
 	std::map<unsigned int, std::string> valmap;
-	void acquire_wrapper(ydb_protocol::transaction_id tid, lock_protocol::lockid_t lid);
+	std::map<lock_protocol::lockid_t, ydb_protocol::transaction_id> lockowner;
+	std::map<ydb_protocol::transaction_id, lock_protocol::lockid_t> waitfor;
+	bool acquire_wrapper(ydb_protocol::transaction_id tid, lock_protocol::lockid_t lid);
+	bool isdeadlock(ydb_protocol::transaction_id tid, lock_protocol::lockid_t lid);
 public:
 	ydb_server_2pl(std::string, std::string);
 	~ydb_server_2pl();
