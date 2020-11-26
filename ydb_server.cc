@@ -169,5 +169,5 @@ unsigned int hash(char *str) {
 		str++;
     }
  
-    return (hash & 0x7FFFFFFF);
+    return ((hash&0x7FFFFFFF)%1022)+2;
 }

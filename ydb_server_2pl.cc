@@ -26,9 +26,11 @@ ydb_protocol::status ydb_server_2pl::transaction_commit(ydb_protocol::transactio
 	std::list<lock_protocol::lockid_t> locklist = lockmap[id];
 	for(lock_protocol::lockid_t lid : locklist) {
 		lc->release(lid);
+		// printf("%d released %llu\n", id, lid);
 		lockowner[lid] = 0;
 	}
 	activemap[id] = false;
+	// printf("%d commit\n", id);
 	return ydb_protocol::OK;
 }
 
@@ -41,11 +43,13 @@ ydb_protocol::status ydb_server_2pl::transaction_abort(ydb_protocol::transaction
 	for(lock_protocol::lockid_t lid : locklist) {
 		if(logmap[lid] == id) {
 			ec->put(lid, valmap[lid]);
-			lc->release(lid);
-			lockowner[lid] = 0;
 		}
+		lc->release(lid);
+		// printf("%d released %llu\n", id, lid);
+		lockowner[lid] = 0;
 	}
 	activemap[id] = false;
+	// printf("%d abort\n", id);
 	return ydb_protocol::OK;
 }
 
@@ -192,8 +196,9 @@ bool ydb_server_2pl::acquire_wrapper(ydb_protocol::transaction_id tid, lock_prot
 			waitfor[tid] = 0;
 			return false;
 		}
-		printf("%d acquire: %llu\n", tid, eid);
+		// printf("%d to aquire %llu\n", tid, eid);
 		lc->acquire(eid);
+		// printf("%d aquired %llu\n", tid, eid);
 		locklist.push_back(eid);
 		lockmap[tid] = locklist;
 		lockowner[eid] = tid;
