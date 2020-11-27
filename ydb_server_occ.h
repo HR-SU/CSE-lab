@@ -3,6 +3,11 @@
 
 #include <string>
 #include <map>
+#include <list>
+#include <set>
+#include <time.h>
+#include <algorithm>
+#include <climits>
 #include "extent_client.h"
 #include "lock_protocol.h"
 #include "lock_client.h"
@@ -12,6 +17,15 @@
 
 
 class ydb_server_occ: public ydb_server {
+protected:
+	struct _transaction_info {
+		clock_t start, valid, finish;
+		std::set<unsigned int> readset;
+		std::set<unsigned int> writeset;
+		std::map<unsigned int, std::string> writelog;
+	};
+	typedef _transaction_info *transaction_info;
+	std::map<ydb_protocol::transaction_id, transaction_info> infomap;
 public:
 	ydb_server_occ(std::string, std::string);
 	~ydb_server_occ();
