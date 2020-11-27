@@ -30,13 +30,16 @@ ydb_protocol::status ydb_server_occ::transaction_commit(ydb_protocol::transactio
 		return ydb_protocol::TRANSIDINV;
 	}
 	transaction_info info = infomap[id];
+printf("%d try to validate\n", id);
 	lc->acquire(1);
+printf("%d validate\n", id);
 	info->valid = clock();
 	for(std::map<ydb_protocol::transaction_id, transaction_info>::iterator itr = infomap.begin();
 	itr != infomap.end(); itr++) {
 		if(itr->first == id) continue;
 		if(itr->second->valid < info->valid) {
 			if(itr->second->finish > info->valid) {
+printf("%d check WAW with %d\n", id, itr->first);
 				std::set<unsigned int> out1;
 				std::set_intersection(itr->second->writeset.begin(),
 					itr->second->writeset.end(), info->writeset.begin(),
@@ -50,6 +53,7 @@ ydb_protocol::status ydb_server_occ::transaction_commit(ydb_protocol::transactio
 				}
 			}
 			if(itr->second->finish > info->start) {
+printf("%d check RAW with %d\n", id, itr->first);
 				std::set<unsigned int> out2;
 				std::set_intersection(itr->second->writeset.begin(),
 					itr->second->writeset.end(), info->readset.begin(),
@@ -71,6 +75,7 @@ ydb_protocol::status ydb_server_occ::transaction_commit(ydb_protocol::transactio
 	}
 	info->finish = clock();
 	activemap[id] = false;
+printf("%d commit\n", id);
 	return ydb_protocol::OK;
 }
 
@@ -83,6 +88,7 @@ ydb_protocol::status ydb_server_occ::transaction_abort(ydb_protocol::transaction
 	info->valid = LONG_MAX;
 	info->finish = LONG_MAX;
 	activemap[id] = false;
+printf("%d abort\n", id);
 	return ydb_protocol::OK;
 }
 
@@ -97,11 +103,14 @@ ydb_protocol::status ydb_server_occ::get(ydb_protocol::transaction_id id, const 
 	while(allocmap[eid] == true && keymap[eid] != key) {
 		eid++;
 	}
-	if(allocmap[eid] == true) {
+	transaction_info info = infomap[id];
+	if(info->writeset.count(eid)) {
+		out_value.assign(info->writelog[eid]);
+	}
+	else if(allocmap[eid] == true) {
 		ec->get(eid, buf);
 		out_value.assign(buf);
 	}
-	transaction_info info = infomap[id];
 	info->readset.insert(eid);
 	return ydb_protocol::OK;
 }
