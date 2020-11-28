@@ -21,6 +21,7 @@ protected:
 	struct _transaction_info {
 		clock_t start, valid, finish;
 		std::set<unsigned int> readset;
+		std::map<unsigned int, std::string> readlog;
 		std::set<unsigned int> writeset;
 		std::map<unsigned int, std::string> writelog;
 	};

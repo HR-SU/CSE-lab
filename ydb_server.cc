@@ -5,11 +5,11 @@
 
 unsigned int hash(char *str);
 
-static long timestamp(void) {
+/*static long timestamp(void) {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	return (tv.tv_sec*1000 + tv.tv_usec/1000);
-}
+}*/
 
 ydb_server::ydb_server(std::string extent_dst, std::string lock_dst) {
 	ec = new extent_client(extent_dst);
@@ -56,27 +56,39 @@ ydb_server::~ydb_server() {
 
 ydb_protocol::status ydb_server::transaction_begin(int, ydb_protocol::transaction_id &out_id) {    // the first arg is not used, it is just a hack to the rpc lib
 	// no imply, just return OK
-	out_id = crtid++;
+	out_id = ++crtid;
+	activemap[out_id] = true;
 	return ydb_protocol::OK;
 }
 
 ydb_protocol::status ydb_server::transaction_commit(ydb_protocol::transaction_id id, int &) {
 	// no imply, just return OK
+	if(!activemap[id]) {
+		return ydb_protocol::TRANSIDINV;
+	}
 	return ydb_protocol::OK;
 }
 
 ydb_protocol::status ydb_server::transaction_abort(ydb_protocol::transaction_id id, int &) {
 	// no imply, just return OK
+	if(!activemap[id]) {
+		return ydb_protocol::TRANSIDINV;
+	}
 	return ydb_protocol::OK;
 }
 
 ydb_protocol::status ydb_server::get(ydb_protocol::transaction_id id, const std::string key, std::string &out_value) {
 	// lab3: your code here
+	if(!activemap[id]) {
+		return ydb_protocol::TRANSIDINV;
+	}
 	out_value.clear();
 	std::string buf;
-	unsigned int eid = hash((char *)key.c_str()) % 1024;
+	unsigned int eid = hash((char *)key.c_str());
 	while(allocmap[eid] == true && keymap[eid] != key) {
 		eid++;
+		eid = eid % 1024;
+		if(eid < 2) eid = 2;
 	}
 	if(allocmap[eid] == true) {
 		ec->get(eid, buf);
@@ -87,9 +99,14 @@ ydb_protocol::status ydb_server::get(ydb_protocol::transaction_id id, const std:
 
 ydb_protocol::status ydb_server::set(ydb_protocol::transaction_id id, const std::string key, const std::string value, int &) {
 	// lab3: your code here
-	unsigned int eid = hash((char *)key.c_str()) % 1024;
+	if(!activemap[id]) {
+		return ydb_protocol::TRANSIDINV;
+	}
+	unsigned int eid = hash((char *)key.c_str());
 	while(allocmap[eid] == true && keymap[eid] != key) {
 		eid++;
+		eid = eid % 1024;
+		if(eid < 2) eid = 2;
 	}
 	if(allocmap[eid] == false) {
 		allocmap[eid] = true;
@@ -115,9 +132,14 @@ ydb_protocol::status ydb_server::set(ydb_protocol::transaction_id id, const std:
 
 ydb_protocol::status ydb_server::del(ydb_protocol::transaction_id id, const std::string key, int &) {
 	// lab3: your code here
-	unsigned int eid = hash((char *)key.c_str()) % 1024;
+	if(!activemap[id]) {
+		return ydb_protocol::TRANSIDINV;
+	}
+	unsigned int eid = hash((char *)key.c_str());
 	while(allocmap[eid] == true && keymap[eid] != key) {
 		eid++;
+		eid = eid % 1024;
+		if(eid < 2) eid = 2;
 	}
 	if(allocmap[eid] == true) {
 		allocmap[eid] = false;

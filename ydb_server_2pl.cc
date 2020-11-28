@@ -26,11 +26,9 @@ ydb_protocol::status ydb_server_2pl::transaction_commit(ydb_protocol::transactio
 	std::list<lock_protocol::lockid_t> locklist = lockmap[id];
 	for(lock_protocol::lockid_t lid : locklist) {
 		lc->release(lid);
-		// printf("%d released %llu\n", id, lid);
 		lockowner[lid] = 0;
 	}
 	activemap[id] = false;
-	// printf("%d commit\n", id);
 	return ydb_protocol::OK;
 }
 
@@ -45,11 +43,9 @@ ydb_protocol::status ydb_server_2pl::transaction_abort(ydb_protocol::transaction
 			ec->put(lid, valmap[lid]);
 		}
 		lc->release(lid);
-		// printf("%d released %llu\n", id, lid);
 		lockowner[lid] = 0;
 	}
 	activemap[id] = false;
-	// printf("%d abort\n", id);
 	return ydb_protocol::OK;
 }
 
@@ -60,9 +56,11 @@ ydb_protocol::status ydb_server_2pl::get(ydb_protocol::transaction_id id, const 
 	}
 	out_value.clear();
 	std::string buf;
-	unsigned int eid = hash((char *)key.c_str()) % 1024;
+	unsigned int eid = hash((char *)key.c_str());
 	while(allocmap[eid] == true && keymap[eid] != key) {
 		eid++;
+		eid = eid % 1024;
+		if(eid < 2) eid = 2;
 	}
 	acquire_wrapper(id, eid);
 	if(allocmap[eid] == true) {
@@ -77,9 +75,11 @@ ydb_protocol::status ydb_server_2pl::set(ydb_protocol::transaction_id id, const 
 	if(!activemap[id]) {
 		return ydb_protocol::TRANSIDINV;
 	}
-	unsigned int eid = hash((char *)key.c_str()) % 1024;
+	unsigned int eid = hash((char *)key.c_str());
 	while(allocmap[eid] == true && keymap[eid] != key) {
 		eid++;
+		eid = eid % 1024;
+		if(eid < 2) eid = 2;
 	}
 	if(!acquire_wrapper(id, (unsigned long long)eid)) {
 		int r;
@@ -119,9 +119,11 @@ ydb_protocol::status ydb_server_2pl::del(ydb_protocol::transaction_id id, const 
 	if(!activemap[id]) {
 		return ydb_protocol::TRANSIDINV;
 	}
-	unsigned int eid = hash((char *)key.c_str()) % 1024;
+	unsigned int eid = hash((char *)key.c_str());
 	while(allocmap[eid] == true && keymap[eid] != key) {
 		eid++;
+		eid = eid % 1024;
+		if(eid < 2) eid = 2;
 	}
 	if(!acquire_wrapper(id, (unsigned long long)eid)) {
 		int r;
@@ -168,19 +170,6 @@ ydb_protocol::status ydb_server_2pl::del(ydb_protocol::transaction_id id, const 
 	return ydb_protocol::OK;
 }
 
-/*unsigned int hash(char *str) {
-	unsigned int seed = 131;
-    unsigned int hash = 0;
-
-    while(*str)
-    {
-        hash = hash * seed + *str;
-		str++;
-    }
- 
-    return (hash & 0x7FFFFFFF);
-}*/
-
 bool ydb_server_2pl::acquire_wrapper(ydb_protocol::transaction_id tid, lock_protocol::lockid_t eid) {
 	std::list<lock_protocol::lockid_t> locklist = lockmap[tid];
 	bool isfound = false;
@@ -196,9 +185,7 @@ bool ydb_server_2pl::acquire_wrapper(ydb_protocol::transaction_id tid, lock_prot
 			waitfor[tid] = 0;
 			return false;
 		}
-		// printf("%d to aquire %llu\n", tid, eid);
 		lc->acquire(eid);
-		// printf("%d aquired %llu\n", tid, eid);
 		locklist.push_back(eid);
 		lockmap[tid] = locklist;
 		lockowner[eid] = tid;
