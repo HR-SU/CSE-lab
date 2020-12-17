@@ -16,6 +16,10 @@ class ydb_server {
 protected:
 	extent_client *ec;
 	lock_client *lc;
+	std::map<ydb_protocol::transaction_id, bool> activemap;
+	std::map<unsigned int, std::string> keymap;
+	std::map<unsigned int, bool> allocmap;
+	ydb_protocol::transaction_id crtid;
 public:
 	ydb_server(std::string, std::string);
 	virtual ~ydb_server();
