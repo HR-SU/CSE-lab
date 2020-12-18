@@ -10,6 +10,9 @@
 class extent_client {
  private:
   rpcc *cl;
+  std::string hostname;
+  std::string id;
+  int port;
 
   struct _cache_entry {
     std::string content;
@@ -21,6 +24,7 @@ class extent_client {
   typedef _cache_entry* cache_entry;
   std::map<extent_protocol::extentid_t, cache_entry> cache;
  public:
+  static int last_port;
   extent_client(std::string dst);
 
   extent_protocol::status create(uint32_t type, extent_protocol::extentid_t &eid);
@@ -30,6 +34,10 @@ class extent_client {
 				                          extent_protocol::attr &a);
   extent_protocol::status put(extent_protocol::extentid_t eid, std::string buf);
   extent_protocol::status remove(extent_protocol::extentid_t eid);
+  
+  int invalidate(extent_protocol::extentid_t eid, int &);
+  int update_content(extent_protocol::extentid_t eid, std::string &buf);
+  int update_attr(extent_protocol::extentid_t eid, extent_protocol::attr &a);
 };
 
 #endif
