@@ -11,6 +11,15 @@ class extent_client {
  private:
   rpcc *cl;
 
+  struct _cache_entry {
+    std::string content;
+    bool valid_read;
+    bool valid_write;
+    bool valid_attr;
+    extent_protocol::attr attr;
+  };
+  typedef _cache_entry* cache_entry;
+  std::map<extent_protocol::extentid_t, cache_entry> cache;
  public:
   extent_client(std::string dst);
 
