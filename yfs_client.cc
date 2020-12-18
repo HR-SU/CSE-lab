@@ -36,6 +36,33 @@ yfs_client::filename(inum inum)
     return ost.str();
 }
 
+extent_protocol::types
+yfs_client::filetype(inum inum, fileinfo &fin)
+{
+    extent_protocol::attr a;
+
+	lc->acquire(inum);
+    if (ec->getattr(inum, a) != extent_protocol::OK) {
+        printf("error getting attr\n");
+        return (extent_protocol::types)0;
+    }
+    lc->release(inum);
+
+    if (a.type == extent_protocol::T_DIR) {
+        fin.atime = a.atime;
+        fin.mtime = a.mtime;
+        fin.ctime = a.ctime;
+    }
+    else {
+        fin.atime = a.atime;
+        fin.mtime = a.mtime;
+        fin.ctime = a.ctime;
+        fin.size = a.size;
+    }
+
+    return (extent_protocol::types)a.type;
+}
+/*
 bool
 yfs_client::isfile(inum inum)
 {
@@ -57,12 +84,13 @@ yfs_client::isfile(inum inum)
     printf("isfile: %lld is not a file\n", inum);
     return false;
 }
+*/
 /** Your code here for Lab...
  * You may need to add routines such as
  * readlink, issymlink here to implement symbolic link.
  * 
  * */
-
+/*
 bool
 yfs_client::isdir(inum inum)
 {
@@ -193,7 +221,7 @@ yfs_client::getsymlink(inum inum, symlinkinfo &slin)
 release:
     return r;
 }
-
+*/
 
 #define EXT_RPC(xx) do { \
     if ((xx) != extent_protocol::OK) { \
