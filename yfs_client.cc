@@ -309,7 +309,7 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
     }
     ino_out = id;
 
-    unsigned long long length = strlen(name);
+    length = strlen(name);
     unsigned long long tol_len = sizeof(inum) + sizeof(unsigned long long) + length;
     char *entry = new char[tol_len];
     memcpy(entry, &id, sizeof(inum));
