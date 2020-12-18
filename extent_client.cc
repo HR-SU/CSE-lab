@@ -50,6 +50,9 @@ extent_client::get(extent_protocol::extentid_t eid, std::string &buf)
       ce->valid_read = true;
       ce->content.assign(buf);
     }
+		if(ce->valid_attr) {
+			ce->attr.atime = time(NULL);
+		}
   }
   else {
     ret = cl->call(extent_protocol::get, eid, buf);
@@ -111,6 +114,11 @@ extent_client::put(extent_protocol::extentid_t eid, std::string buf)
       ce->valid_write = true;
       ce->content.assign(buf);
     }
+		if(ce->valid_attr) {
+			ce->attr.size = buf.size();
+			ce->attr.mtime = time(NULL); ce->attr.atime = time(NULL);
+			ce->attr.ctime = time(NULL);
+		}
   }
   else {
     ret = cl->call(extent_protocol::put, eid, buf, r);
