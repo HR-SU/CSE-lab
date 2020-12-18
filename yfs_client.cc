@@ -273,21 +273,42 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out)
      */
     bool found = false;
     lc->acquire(parent);
-    lookup_nolock(parent, name, found, ino_out);
+    std::string buf;
+    ec->get(parent, buf);
+    inum id;
+    unsigned long long length;
+    const char *c_str = buf.c_str();
+    unsigned long long left = buf.length();
+    char *ptr = (char *)c_str;
+    while(left > 0) {
+        memcpy(&id, ptr, sizeof(inum));
+        ptr += sizeof(inum);
+        memcpy(&length, ptr, sizeof(unsigned long long));
+        ptr += sizeof(unsigned long long);
+        char *name_buf = new char[length + 1];
+        memcpy(name_buf, ptr, length);
+        name_buf[length] = '\0';
+        if(strcmp(name_buf, name) == 0) {
+            ino_out = id;
+            found = true;
+            delete []name_buf;
+            break;
+        }
+        delete []name_buf;
+        ptr += length;
+        left -= (sizeof(inum) + sizeof(unsigned long long) + length);
+    }
     if(found == true) {
         lc->release(parent);
         return EXIST;
     }
 
-    inum id;
     if(ec->create(extent_protocol::T_FILE, id) != extent_protocol::OK) {
         lc->release(parent);
         printf("error when creating file!\n");
     }
     ino_out = id;
 
-    std::string buf;
-    ec->get(parent, buf);
     unsigned long long length = strlen(name);
     unsigned long long tol_len = sizeof(inum) + sizeof(unsigned long long) + length;
     char *entry = new char[tol_len];
@@ -520,26 +541,18 @@ int yfs_client::unlink(inum parent,const char *name)
      * note: you should remove the file using ec->remove,
      * and update the parent directory content.
      */
+    lc->acquire(parent);
     bool found = false;
     inum id;
-    lc->acquire(parent);
-    lookup_nolock(parent, name, found, id);
-    if(found == false) {
-        lc->release(parent);
-        return NOENT;
-    }
-    ec->remove(id);
-
+    unsigned long long length;
     std::string buf;
     ec->get(parent, buf);
-    unsigned long long length = strlen(name);
     const char *c_str = buf.c_str();
     unsigned long long left = buf.length();
     char *ptr = (char *)c_str;
 
-    unsigned long long dir_new_length = left - 
-            (sizeof(inum) + sizeof(unsigned long long) + length);
-    char *dir_new = new char[dir_new_length];
+    unsigned long long dir_new_length = left;
+    char *dir_new = new char[left];
     char *ptr_new = dir_new;
     while(left > 0) {
         memcpy(&id, ptr, sizeof(inum));
@@ -558,11 +571,24 @@ int yfs_client::unlink(inum parent,const char *name)
             memcpy(ptr_new, name_buf, length);
             ptr_new += length;
         }
+        else {
+            found = true;
+            ec->remove(id);
+        }
         left -= (sizeof(inum) + sizeof(unsigned long long) + length);
+        delete []name_buf;
     }
-    std::string buf_new;
-    buf_new.assign(dir_new, dir_new_length);
-    ec->put(parent, buf_new);
+    if(found) {
+        dir_new_length -= (sizeof(inum) + sizeof(unsigned long long) + strlen(name));
+        std::string buf_new;
+        buf_new.assign(dir_new, dir_new_length);
+        ec->put(parent, buf_new);
+    }
+    else {
+        r = NOENT;
+    }
+    delete []dir_new;
+    
     lc->release(parent);
     return r;
 }
