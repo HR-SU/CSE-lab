@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include "lang/verify.h"
 
+#define VERBOSE 0
 extent_server::extent_server() 
 {
   im = new inode_manager();
@@ -22,14 +23,25 @@ int extent_server::create(uint32_t type, std::string cid, extent_protocol::exten
   // alloc a new inode and return inum
   // printf("extent_server: create inode\n");
   id = im->alloc_inode(type);
-
+  extent_info ei;
+  if(extents.count(id) != 0) {
+    ei = extents[id];
+		ei->writer = cid;
+	}
+	else {
+		ei = (extent_info)(new _extent_info);
+    extents[id] = ei;
+	}
+	if(ei->readers.count(cid) == 0) {
+    ei->readers.insert(cid);
+  }
   return extent_protocol::OK;
 }
 
 int extent_server::put(extent_protocol::extentid_t id, std::string cid, std::string buf, int &r)
 {
   id &= 0x7fffffff;
-  
+  if(VERBOSE) printf("put %llu from %s\n", id, cid.c_str());
   const char * cbuf = buf.c_str();
   int size = buf.size();
   im->write_file(id, cbuf, size);
@@ -38,12 +50,14 @@ int extent_server::put(extent_protocol::extentid_t id, std::string cid, std::str
   if(extents.count(id) != 0) {
     ei = extents[id];
     for(std::string reader : ei->readers) {
-      if(reader == cid) continue;
+      if(reader == cid) {continue;}
+			if(VERBOSE) printf("es: ivalidate cache of eid %llu of %s\n", id, reader.c_str());
       handle hd(reader);
       rpcc *cl = hd.safebind();
       extent_protocol::status ret; int r;
       if(cl) ret = cl->call(extent_protocol::invalidate, id, r);
       else VERIFY(0);
+			VERIFY(ret == extent_protocol::OK);
     }
   }
   else {
@@ -51,14 +65,16 @@ int extent_server::put(extent_protocol::extentid_t id, std::string cid, std::str
     extents[id] = ei;
   }
   ei->writer = cid;
-
+	if(ei->readers.count(cid) == 0) {
+    ei->readers.insert(cid);
+  }
   r = 0;
   return extent_protocol::OK;
 }
 
 int extent_server::get(extent_protocol::extentid_t id, std::string cid, std::string &buf)
 {
-  // printf("extent_server: get %lld\n", id);
+  if(VERBOSE) printf("es: get %llu from %s\n", id, cid.c_str());
 
   id &= 0x7fffffff;
 
@@ -68,12 +84,14 @@ int extent_server::get(extent_protocol::extentid_t id, std::string cid, std::str
   bool flag = false;
   if(extents.count(id) != 0) {
     ei = extents[id];
-    if(ei->writer != cid) {
+    if(ei->writer != cid && ei->writer.size() > 0) {
+			if(VERBOSE) printf("es: update content of eid %llu of %s\n", id, ei->writer.c_str());
       handle hd(ei->writer);
       rpcc *cl = hd.safebind();
       extent_protocol::status ret;
       if(cl) ret = cl->call(extent_protocol::update_content, id, buf);
       else VERIFY(0);
+			VERIFY(ret == extent_protocol::OK);
     }
     else flag = true;
   }
@@ -100,21 +118,21 @@ int extent_server::get(extent_protocol::extentid_t id, std::string cid, std::str
 
 int extent_server::getattr(extent_protocol::extentid_t id, std::string cid, extent_protocol::attr &a)
 {
-  // printf("extent_server: getattr %lld\n", id);
-
   id &= 0x7fffffff;
-  
+  if(VERBOSE) printf("getattr %llu from %s\n", id, cid.c_str());
   extent_protocol::attr attr;
   extent_info ei;
   bool flag = false;
   if(extents.count(id) != 0) {
     ei = extents[id];
-    if(ei->writer != cid) {
+    if(ei->writer != cid && ei->writer.size() > 0) {
+			if(VERBOSE) printf("es: update attr of eid %llu of %s\n", id, ei->writer.c_str());
       handle hd(ei->writer);
       rpcc *cl = hd.safebind();
       extent_protocol::status ret;
       if(cl) ret = cl->call(extent_protocol::update_attr, id, a);
       else VERIFY(0);
+			VERIFY(ret == extent_protocol::OK);
     }
     else flag = true;
   }
@@ -137,8 +155,6 @@ int extent_server::getattr(extent_protocol::extentid_t id, std::string cid, exte
 
 int extent_server::remove(extent_protocol::extentid_t id, std::string cid, int &r)
 {
-  // printf("extent_server: write %lld\n", id);
-
   id &= 0x7fffffff;
   im->remove_file(id);
 
@@ -152,6 +168,7 @@ int extent_server::remove(extent_protocol::extentid_t id, std::string cid, int &
       extent_protocol::status ret; int r;
       if(cl) ret = cl->call(extent_protocol::invalidate, id, r);
       else VERIFY(0);
+			VERIFY(ret == extent_protocol::OK);
     }
   }
   r = 0;

@@ -22,9 +22,9 @@ int lock_server_cache::acquire(lock_protocol::lockid_t lid, std::string id, int 
   lock_protocol::status ret = lock_protocol::OK;
   // Your lab2 part3 code goes here
   pthread_mutex_lock(&mutex);
-  tprintf("%s: trying to acquire lock %llu\n", id.c_str(), lid);
+  // tprintf("%s: trying to acquire lock %llu\n", id.c_str(), lid);
   if(lockpool.count(lid) == 0 || lockpool[lid] == FREE) {
-    tprintf("%s: lock %llu is free, grant it directly\n", id.c_str(), lid);
+    // tprintf("%s: lock %llu is free, grant it directly\n", id.c_str(), lid);
     lockpool[lid] = LOCKED;
     lockowner[lid] = id;
     pthread_mutex_unlock(&mutex);

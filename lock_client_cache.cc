@@ -29,6 +29,7 @@ lock_client_cache::lock_client_cache(std::string xdst,
   id = host.str();
   last_port = rlock_port;
   rpcs *rlsrpc = new rpcs(rlock_port);
+	if(VERBOSE) printf("lock_client start at %s\n", id.c_str());
   rlsrpc->reg(rlock_protocol::revoke, this, &lock_client_cache::revoke_handler);
   rlsrpc->reg(rlock_protocol::retry, this, &lock_client_cache::retry_handler);
 }

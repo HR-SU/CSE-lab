@@ -79,7 +79,7 @@ ifeq ($(LAB2GE),1)
 endif
 yfs_client : $(patsubst %.cc,%.o,$(yfs_client)) rpc/$(RPCLIB)
 
-extent_server=extent_server.cc extent_smain.cc inode_manager.cc
+extent_server=extent_server.cc extent_smain.cc inode_manager.cc handle.cc
 extent_server : $(patsubst %.cc,%.o,$(extent_server)) rpc/$(RPCLIB)
 
 ydb_server=ydb_server.cc ydb_server_2pl.cc ydb_server_occ.cc ydb_smain.cc extent_client.cc lock_client.cc lock_client_cache.cc
@@ -136,7 +136,7 @@ clean_files=rpc/*.a rpc/rpctest rpc/*.o rpc/*.d *.o *.d yfs_client extent_server
 clean: 
 	rm $(clean_files) -rf 
 
-handin_ignore=$(clean_files) core* *log
+handin_ignore=$(clean_files) core* *log .git*
 handin_file=lab$(LAB).tgz
 labdir=$(shell basename $(PWD))
 handin: 
