@@ -33,13 +33,15 @@ extent_client::extent_client(std::string dst)
   rlsrpc->reg(extent_protocol::update_content, this, &extent_client::update_content);
   rlsrpc->reg(extent_protocol::update_attr, this, &extent_client::update_attr);
   rlsrpc->reg(extent_protocol::invalidate, this, &extent_client::invalidate);
+  dally = 0;
 }
 
 extent_protocol::status
 extent_client::create(uint32_t type, extent_protocol::extentid_t &eid)
 {
   extent_protocol::status ret = extent_protocol::OK;
-  ret = cl->call(extent_protocol::create, type, id, eid);
+  if(dally > 1) eid = dally;
+  else ret = cl->call(extent_protocol::create, type, id, eid);
   cache_entry ce;
   if(cache.count(eid) == 0) {
     ce = (cache_entry)(new _cache_entry);
@@ -48,10 +50,22 @@ extent_client::create(uint32_t type, extent_protocol::extentid_t &eid)
   else {
     ce = cache[eid];
   }
-  ce->valid_read = false;
-  ce->valid_write = false;
-  ce->valid_attr = false;
-	ce->attr.type = type;
+  if(dally > 1) {
+    ce->valid_read = true;
+    ce->valid_write = true;
+    ce->valid_attr = true;
+    ce->content.clear();
+    ce->attr.atime = time(NULL); ce->attr.ctime = time(NULL);
+    ce->attr.mtime = time(NULL); ce->attr.size = 0;
+    ce->attr.type = type;
+    dally = 0;
+  }
+  else {
+		ce->valid_read = false;
+		ce->valid_write = false;
+		ce->valid_attr = false;
+		ce->attr.type = type;
+  }
   return ret;
 }
 
@@ -157,7 +171,23 @@ extent_client::remove(extent_protocol::extentid_t eid)
 {
   extent_protocol::status ret = extent_protocol::OK;
   int r;
-  ret = cl->call(extent_protocol::remove, eid, id, r);
+  if(dally > 0) {
+    ret = cl->call(extent_protocol::remove, dally, id, r);
+    if(cache.count(eid) != 0) {
+      cache_entry ce = cache[eid];
+		  ce->content.clear();
+      ce->valid_read = false;
+      ce->valid_write = false;
+      ce->valid_attr = false;
+    }
+    dally = 0;
+  }
+  if(dally == 0 && eid > 1 && cache.count(eid) != 0) {
+    cache_entry ce = cache[eid];
+    if(ce->valid_write == true) dally = eid;
+    else ret = cl->call(extent_protocol::remove, eid, id, r);
+  }
+  else ret = cl->call(extent_protocol::remove, eid, id, r);
   if(cache.count(eid) != 0) {
     cache_entry ce = cache[eid];
 		ce->content.clear();

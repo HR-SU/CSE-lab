@@ -23,6 +23,7 @@ class extent_client {
   };
   typedef _cache_entry* cache_entry;
   std::map<extent_protocol::extentid_t, cache_entry> cache;
+  extent_protocol::extentid_t dally;
  public:
   static int last_port;
   extent_client(std::string dst);

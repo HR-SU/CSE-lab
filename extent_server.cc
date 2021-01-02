@@ -12,7 +12,7 @@
 #include <fcntl.h>
 #include "lang/verify.h"
 
-#define VERBOSE 0
+#define VERBOSE 1
 extent_server::extent_server() 
 {
   im = new inode_manager();
@@ -35,6 +35,7 @@ int extent_server::create(uint32_t type, std::string cid, extent_protocol::exten
 	if(ei->readers.count(cid) == 0) {
     ei->readers.insert(cid);
   }
+  if(VERBOSE) printf("create %llu from %s\n", id, cid.c_str());
   return extent_protocol::OK;
 }
 
@@ -49,7 +50,8 @@ int extent_server::put(extent_protocol::extentid_t id, std::string cid, std::str
   extent_info ei;
   if(extents.count(id) != 0) {
     ei = extents[id];
-    for(std::string reader : ei->readers) {
+    for(std::set<std::string>::iterator it = ei->readers.begin(); it != ei->readers.end(); it++) {
+      std::string reader = *it;
       if(reader == cid) {continue;}
 			if(VERBOSE) printf("es: ivalidate cache of eid %llu of %s\n", id, reader.c_str());
       handle hd(reader);
@@ -155,13 +157,15 @@ int extent_server::getattr(extent_protocol::extentid_t id, std::string cid, exte
 
 int extent_server::remove(extent_protocol::extentid_t id, std::string cid, int &r)
 {
+  if(VERBOSE) printf("remove %llu from %s\n", id, cid.c_str());
   id &= 0x7fffffff;
   im->remove_file(id);
 
   extent_info ei;
   if(extents.count(id) != 0) {
     ei = extents[id];
-    for(std::string reader : ei->readers) {
+    for(std::set<std::string>::iterator it = ei->readers.begin(); it != ei->readers.end(); it++) {
+      std::string reader = *it;
       if(reader == cid) continue;
       handle hd(reader);
       rpcc *cl = hd.safebind();
